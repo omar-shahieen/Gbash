@@ -6,90 +6,50 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
+
+	"github.com/omar-shahieen/Gbash/internal/builtins"
+	"github.com/omar-shahieen/Gbash/internal/executor"
+	"github.com/omar-shahieen/Gbash/internal/parser"
+	"github.com/omar-shahieen/Gbash/internal/shell"
 )
 
-func tokenize(input string) []string {
-	return strings.Fields(input)
+func execute(sh *shell.Shell, cmd shell.Command) int {
+	if fn, ok := builtins.Lookup(cmd.Name); ok {
+		return fn(sh, cmd.Args, sh.Stdout, sh.Stderr)
+	}
+	return executor.ExecCommand(sh, cmd)
 }
 
-type Command struct {
-	Name      string
-	Arguments []string
-}
-
-var lastStatus int // package-level for now; $? and && will read it later
-
-func runLine(line string) int {
-	tokens := tokenize(line)
-
-	// Empty or whitespace-only input is not a command.
-	if len(tokens) == 0 {
-		return 0
-	}
-
-	cmd := Command{
-		Name:      tokens[0],
-		Arguments: tokens[1:],
-	}
-
-	proc := exec.Command(cmd.Name, cmd.Arguments...)
-	proc.Stdin = os.Stdin
-	proc.Stdout = os.Stdout
-	proc.Stderr = os.Stderr
-
-	err := proc.Run()
-	if err == nil {
-		return 0
-	}
-
-	var execErr *exec.Error
-	if errors.As(err, &execErr) &&
-		errors.Is(execErr.Err, exec.ErrNotFound) {
-		fmt.Fprintf(
-			os.Stderr,
-			"minishell: %s: command not found\n",
-			cmd.Name,
-		)
-		return 127
-	}
-
-	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
-		return exitErr.ExitCode()
-	}
-
-	fmt.Fprintf(os.Stderr, "minishell: %s: %v\n", cmd.Name, err)
-	return 126
-}
-func main() {
-	reader := bufio.NewReader(os.Stdin)
+func run(sh *shell.Shell) int {
+	reader := bufio.NewReader(sh.Stdin)
 
 	for {
-		fmt.Print("minishell> ")
+		fmt.Fprint(sh.Stdout, "minishell> ")
 
 		line, err := reader.ReadString('\n')
-
-		// A real read error: report to stderr and exit with failure.
 		if err != nil && !errors.Is(err, io.EOF) {
-			fmt.Fprintln(os.Stderr, "minishell: read error:", err)
-			os.Exit(1)
+			fmt.Fprintln(sh.Stderr, "minishell: read error:", err)
+			return 1
 		}
-		atEOF := err != nil // only io.EOF can reach this point
+		atEOF := err != nil
 
-		line = strings.TrimSpace(line)
+		if tokens := parser.Tokenize(strings.TrimSpace(line)); len(tokens) > 0 {
+			cmd := shell.Command{Name: tokens[0], Args: tokens[1:]}
+			sh.LastStatus = execute(sh, cmd)
 
-		if line == "exit" {
-			return
+			if sh.Exiting {
+				return sh.ExitCode
+			}
 		}
-		if line != "" {
-			lastStatus = runLine(line)
-		}
 
-		// Handle any final line first, then stop on EOF.
 		if atEOF {
-			fmt.Println() // so the terminal prompt starts on a fresh line
-			return
+			fmt.Fprintln(sh.Stdout)
+			return sh.LastStatus
 		}
 	}
+}
+
+func main() {
+	os.Exit(run(shell.New()))
 }

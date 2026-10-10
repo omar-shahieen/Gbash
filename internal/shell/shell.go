@@ -5,17 +5,28 @@ import (
 	"os"
 )
 
-type Command struct {
-	Name string
-	Args []string
-}
+type RedirMode int
+
+const (
+	ModeRead RedirMode = iota
+	ModeTruncate
+	ModeAppend
+)
 
 type Redirection struct {
-
-	// The target file or command to redirect to/from.
+	FD       int // 0 = stdin, 1 = stdout, 2 = stderr
+	Mode     RedirMode
 	Filename string
-	// The operator used for redirection, e.g. ">", ">>", "<", "2>", etc.
-	Operator string
+}
+
+type Command struct {
+	Name         string
+	Args         []string
+	Redirections []Redirection
+}
+
+type Pipeline struct {
+	Commands []Command
 }
 
 // Shell holds all mutable state that built-ins and the executor need.

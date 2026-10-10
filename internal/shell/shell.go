@@ -34,7 +34,8 @@ type Shell struct {
 	LastStatus int
 
 	// Set by the exit built-in; the main loop checks these.
-	Exiting  bool
+	Exiting bool
+
 	ExitCode int
 
 	Stdin  io.Reader

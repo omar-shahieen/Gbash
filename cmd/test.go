@@ -2,30 +2,29 @@ package main
 
 import (
 	"fmt"
-	"sync"
-	"time"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
-func worker(id int, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	fmt.Printf("Worker %d started\n", id)
-	time.Sleep(time.Second)
-	fmt.Printf("Worker %d finished\n", id)
-}
-
 func main() {
-	var wg sync.WaitGroup
+	// Create a channel to receive signals.
+	sigChan := make(chan os.Signal, 1)
 
-	// Tell the WaitGroup to wait for 3 tasks.
-	wg.Add(3)
+	// Register the signals we want to listen for.
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
 
-	go worker(1, &wg)
-	go worker(2, &wg)
-	go worker(3, &wg)
+	fmt.Println("Waiting for signals...")
 
-	// Block until all 3 tasks finish.
-	wg.Wait()
+	// Block until a signal arrives.
+	sig := <-sigChan
 
-	fmt.Println("All workers finished")
+	switch sig {
+	case os.Interrupt:
+		fmt.Println("Received Ctrl+C")
+	case syscall.SIGTERM:
+		fmt.Println("Received termination request")
+	}
+
 }

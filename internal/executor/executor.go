@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"syscall"
 
 	"github.com/omar-shahieen/Gbash/internal/builtins"
 	"github.com/omar-shahieen/Gbash/internal/shell"
@@ -33,6 +34,12 @@ func runExternalCommand(sh *shell.Shell, cmd shell.Command, in io.Reader, out, e
 
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
+		if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+			if ws.Signal() == syscall.SIGINT {
+				fmt.Fprintln(errOut) // newline after the "^C"
+			}
+			return 128 + int(ws.Signal())
+		}
 		return exitErr.ExitCode()
 	}
 

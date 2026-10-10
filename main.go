@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"sync/atomic"
 
 	"github.com/omar-shahieen/Gbash/internal/executor"
 	"github.com/omar-shahieen/Gbash/internal/parser"
@@ -16,6 +18,24 @@ import (
 func run(sh *shell.Shell) int {
 	reader := bufio.NewReader(sh.Stdin)
 
+	// Create a channel to receive signals.
+	var running atomic.Bool
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt)
+	defer signal.Stop(sigChan)
+
+	go func() {
+		for range sigChan {
+			if !running.Load() {
+				// Ctrl+C at the prompt: the tty already discarded the typed line,
+				// so just start a fresh prompt.
+				fmt.Fprint(sh.Stdout, "\nminishell> ")
+			}
+			// If a command is running, do nothing: the child got SIGINT
+			// from the tty and will die on its own.
+		}
+	}()
 	for {
 		fmt.Fprint(sh.Stdout, "minishell> ")
 
@@ -37,7 +57,9 @@ func run(sh *shell.Shell) int {
 				fmt.Fprintf(sh.Stderr, "minishell: %v\n", err)
 				sh.LastStatus = 2
 			} else {
+				running.Store(true)
 				sh.LastStatus = executor.Execute(sh, pipeline)
+				running.Store(false)
 				if sh.Exiting {
 					return sh.ExitCode
 				}

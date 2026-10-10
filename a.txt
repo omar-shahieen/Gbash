@@ -1,0 +1,7 @@
+a.txt
+
+.:
+a.txt
+go.mod
+internal
+main.go

@@ -10,6 +10,14 @@ type Command struct {
 	Args []string
 }
 
+type Redirection struct {
+
+	// The target file or command to redirect to/from.
+	Filename string
+	// The operator used for redirection, e.g. ">", ">>", "<", "2>", etc.
+	Operator string
+}
+
 // Shell holds all mutable state that built-ins and the executor need.
 type Shell struct {
 	LastStatus int

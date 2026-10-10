@@ -9,7 +9,9 @@ import (
 )
 
 func ExecCommand(sh *shell.Shell, cmd shell.Command) int {
+
 	proc := exec.Command(cmd.Name, cmd.Args...)
+
 	proc.Stdin = sh.Stdin
 	proc.Stdout = sh.Stdout
 	proc.Stderr = sh.Stderr

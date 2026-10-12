@@ -10,6 +10,7 @@ type TokenKind int
 const (
 	Word TokenKind = iota
 	Pipe
+	Background
 	RedirOut
 	RedirAppend
 	RedirIn
@@ -41,6 +42,9 @@ func Tokenize(input string) ([]Token, error) {
 		case unicode.IsSpace(r):
 			flush()
 
+		case r == '&':
+			flush()
+			tokens = append(tokens, Token{Background, "&"})
 		case r == '|':
 			flush()
 			tokens = append(tokens, Token{Pipe, "|"})

@@ -9,6 +9,8 @@ import (
 	"os/signal"
 	"strings"
 	"sync/atomic"
+	"syscall"
+	"time"
 
 	"github.com/omar-shahieen/Gbash/internal/executor"
 	"github.com/omar-shahieen/Gbash/internal/parser"
@@ -16,24 +18,38 @@ import (
 )
 
 func run(sh *shell.Shell) int {
+	if err := executor.InitTerminal(sh); err != nil {
+		fmt.Fprintf(sh.Stderr, "minishell: terminal: %v\n", err)
+		return 1
+	}
+
+	if sh.Interactive {
+		signal.Ignore(syscall.SIGTTOU)
+		defer signal.Reset(syscall.SIGTTOU)
+	}
 	reader := bufio.NewReader(sh.Stdin)
 
 	// Create a channel to receive signals.
 	var running atomic.Bool
 
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTSTP)
 	defer signal.Stop(sigChan)
 
 	go func() {
-		for range sigChan {
-			if !running.Load() {
-				// Ctrl+C at the prompt: the tty already discarded the typed line,
-				// so just start a fresh prompt.
-				fmt.Fprint(sh.Stdout, "\nminishell> ")
-			}
+		for sig := range sigChan {
+			switch sig {
+			case os.Interrupt:
+				if !running.Load() {
+					// Ctrl+C at the prompt: the tty already discarded the typed line,
+					// so just start a fresh prompt.
+					fmt.Fprint(sh.Stdout, "\nminishell> ")
+				}
 			// If a command is running, do nothing: the child got SIGINT
 			// from the tty and will die on its own.
+			case syscall.SIGTSTP:
+				// Ctrl+Z
+			}
 		}
 	}()
 	for {
@@ -42,6 +58,7 @@ func run(sh *shell.Shell) int {
 		line, err := reader.ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
 			fmt.Fprintln(sh.Stderr, "minishell: read error:", err)
+			time.Sleep(100 * time.Second) // Give the shell a moment to print the last status before exiting.
 			return 1
 		}
 		atEOF := err != nil
@@ -74,5 +91,6 @@ func run(sh *shell.Shell) int {
 }
 
 func main() {
+
 	os.Exit(run(shell.New()))
 }

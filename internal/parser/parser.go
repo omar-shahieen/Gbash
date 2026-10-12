@@ -32,6 +32,9 @@ func ParseRedirections(tokens []Token) ([]string, []shell.Redirection, error) {
 
 		info, ok := redirTable[tok.Type]
 		if !ok {
+			if tok.Type == Background {
+				return nil, nil, fmt.Errorf("syntax error: & must appear at the end of a pipeline")
+			}
 			return nil, nil, fmt.Errorf("syntax error: unexpected token %q", tok.Value)
 		}
 
@@ -67,8 +70,21 @@ func ParseCommand(tokens []Token) (shell.Command, error) {
 
 func ParsePipeline(tokens []Token) (shell.Pipeline, error) {
 	var pipeline shell.Pipeline
-	start := 0
 
+	if len(tokens) == 0 {
+		return shell.Pipeline{}, fmt.Errorf("syntax error: empty pipeline")
+	}
+
+	if len(tokens) > 0 && tokens[len(tokens)-1].Type == Background {
+		pipeline.Background = true
+		tokens = tokens[:len(tokens)-1]
+	}
+
+	if len(tokens) == 0 {
+		return shell.Pipeline{},
+			fmt.Errorf("syntax error: missing command before &")
+	}
+	start := 0
 	for i, token := range tokens {
 		if token.Type != Pipe {
 			continue

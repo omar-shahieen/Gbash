@@ -5,30 +5,6 @@ import (
 	"os"
 )
 
-type RedirMode int
-
-const (
-	ModeRead RedirMode = iota
-	ModeTruncate
-	ModeAppend
-)
-
-type Redirection struct {
-	FD       int // 0 = stdin, 1 = stdout, 2 = stderr
-	Mode     RedirMode
-	Filename string
-}
-
-type Command struct {
-	Name         string
-	Args         []string
-	Redirections []Redirection
-}
-
-type Pipeline struct {
-	Commands []Command
-}
-
 // Shell holds all mutable state that built-ins and the executor need.
 type Shell struct {
 	LastStatus int
@@ -41,12 +17,25 @@ type Shell struct {
 	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
+
+	ForegroundJob *Job
+	Jobs          map[int]*Job
+	NextJobID     int
+	JobEvents     chan JobEvent
+
+	Interactive bool
+	Terminal    *os.File
+	ShellPGID   int
 }
 
 func New() *Shell {
 	return &Shell{
-		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
+		Stdin:         os.Stdin,
+		Stdout:        os.Stdout,
+		Stderr:        os.Stderr,
+		ForegroundJob: nil,
+		Jobs:          make(map[int]*Job),
+		NextJobID:     1,
+		JobEvents:     make(chan JobEvent, 64),
 	}
 }

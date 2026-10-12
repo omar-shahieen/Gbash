@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,6 +33,7 @@ func init() {
 		"unset":  unsetCmd,
 		"exit":   exitCmd,
 		"type":   typeCmd,
+		"jobs":   jobsCmd,
 	}
 }
 
@@ -221,4 +224,31 @@ func unsetCmd(sh *shell.Shell, args []string, out, errOut io.Writer) int {
 		}
 	}
 	return status
+}
+
+func jobsCmd(
+	sh *shell.Shell,
+	args []string,
+	out, errOut io.Writer,
+) int {
+	if len(args) > 0 {
+		fmt.Fprintln(errOut, "minishell: jobs: no arguments supported")
+		return 1
+	}
+	jobIDs := slices.Collect(maps.Keys(sh.Jobs))
+
+	slices.Sort(jobIDs)
+	for _, id := range jobIDs {
+		job, exists := sh.Jobs[id]
+		if !exists {
+			continue
+		}
+		fmt.Fprintf(out, "[%d] %s pgid=%d\n",
+			job.JobID,
+			job.State(),
+			job.PGID,
+		)
+	}
+	return 0
+
 }

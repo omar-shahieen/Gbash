@@ -6,7 +6,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/omar-shahieen/Gbash/internal/shell"
+	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
 // Workers publish events. Only the main shell receives them and updates jobs.

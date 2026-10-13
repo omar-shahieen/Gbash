@@ -3,7 +3,7 @@ package parser
 import (
 	"fmt"
 
-	"github.com/omar-shahieen/Gbash/internal/shell"
+	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
 // redirTable maps each operator token to its fd and mode, once.

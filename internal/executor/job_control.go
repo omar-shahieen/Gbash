@@ -7,7 +7,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/omar-shahieen/Gbash/internal/shell"
+	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
 // Job-control commands run in the main shell, with the same redirection setup.

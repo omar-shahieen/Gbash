@@ -2,11 +2,12 @@ package builtins
 
 import (
 	"fmt"
-	"github.com/omar-shahieen/Gbash/internal/shell"
 	"io"
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
 func exportCmd(sh *shell.Shell, args []string, out, errOut io.Writer) int {

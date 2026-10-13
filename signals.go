@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/omar-shahieen/Gbash/internal/shell"
+	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
 // setupShutdownSignals turns SIGTERM into a shared shutdown notification.

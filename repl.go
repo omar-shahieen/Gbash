@@ -10,9 +10,9 @@ import (
 	"sync/atomic"
 	"syscall"
 
-	"github.com/omar-shahieen/Gbash/internal/executor"
-	"github.com/omar-shahieen/Gbash/internal/parser"
-	"github.com/omar-shahieen/Gbash/internal/shell"
+	"github.com/omar-shahieen/gbash/internal/executor"
+	"github.com/omar-shahieen/gbash/internal/parser"
+	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
 type inputResult struct {

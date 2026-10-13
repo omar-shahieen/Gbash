@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/omar-shahieen/Gbash/internal/shell"
+	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
 func TestReadLineCanStopWhileInputIsBlocked(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/omar-shahieen/Gbash/internal/shell"
+	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
 // commandStreams names a command's streams and owns only its redirection files.

@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/omar-shahieen/Gbash/internal/shell"
+	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
 func TestPipelineSyntax(t *testing.T) {

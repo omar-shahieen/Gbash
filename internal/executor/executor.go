@@ -3,19 +3,23 @@ package executor
 import (
 	"fmt"
 
-	"github.com/omar-shahieen/Gbash/internal/builtins"
-	"github.com/omar-shahieen/Gbash/internal/shell"
+	"github.com/omar-shahieen/gbash/internal/builtins"
+	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
 // Execute is the entry point the shell loop calls for one parsed line.
 func Execute(sh *shell.Shell, pipeline shell.Pipeline) int {
 	drainJobEvents(sh)
+
 	if pipeline.Background {
 		for _, cmd := range pipeline.Commands {
-			_, builtin := builtins.Lookup(cmd.Name)
-			if builtin || isJobControl(cmd.Name) {
+			if cmd.Name == "jobs" {
+				fmt.Fprintf(sh.Stderr, "minishell: jobs: background execution not supported\n")
+				return 1
+			}
+			if builtins.IsJobControl(cmd.Name) {
 				fmt.Fprintf(sh.Stderr,
-					"minishell: %s: background execution not supported yet\n", cmd.Name)
+					"minishell: %s: background execution not supported for job control commands\n", cmd.Name)
 				return 1
 			}
 		}
@@ -23,7 +27,11 @@ func Execute(sh *shell.Shell, pipeline shell.Pipeline) int {
 
 	if len(pipeline.Commands) > 1 {
 		for _, cmd := range pipeline.Commands {
-			if isJobControl(cmd.Name) {
+			if cmd.Name == "jobs" {
+				fmt.Fprintf(sh.Stderr, "minishell: jobs: cannot run in a pipeline\n")
+				return 1
+			}
+			if builtins.IsJobControl(cmd.Name) {
 				fmt.Fprintf(sh.Stderr, "minishell: %s: cannot run in a pipeline\n", cmd.Name)
 				return 1
 			}
@@ -32,11 +40,11 @@ func Execute(sh *shell.Shell, pipeline shell.Pipeline) int {
 
 	if len(pipeline.Commands) == 1 {
 		cmd := pipeline.Commands[0]
-		if isJobControl(cmd.Name) {
+		if builtins.IsJobControl(cmd.Name) {
 			return executeJobControl(sh, cmd)
 		}
 
-		if builtin, ok := builtins.Lookup(cmd.Name); ok {
+		if builtin, ok := builtins.Lookup(cmd.Name); ok && !pipeline.Background {
 			streams, err := prepareRedirections(cmd, shellStreams(sh))
 			if err != nil {
 				fmt.Fprintf(sh.Stderr, "minishell: %v\n", err)
@@ -48,13 +56,4 @@ func Execute(sh *shell.Shell, pipeline shell.Pipeline) int {
 	}
 
 	return executePipeline(sh, pipeline)
-}
-
-func isJobControl(name string) bool {
-	switch name {
-	case "fg", "bg", "wait":
-		return true
-	default:
-		return false
-	}
 }

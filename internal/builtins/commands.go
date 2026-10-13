@@ -3,13 +3,14 @@ package builtins
 import (
 	"errors"
 	"fmt"
-	"github.com/omar-shahieen/Gbash/internal/shell"
 	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
 func cdCmd(sh *shell.Shell, args []string, out, errOut io.Writer) int {
@@ -96,10 +97,11 @@ func typeCmd(sh *shell.Shell, args []string, out, errOut io.Writer) int {
 
 	status := 0
 	for _, name := range args {
-		if _, ok := table[name]; ok {
+		if _, ok := table[name]; ok || IsJobControl(name) {
 			fmt.Fprintf(out, "%s is a shell builtin\n", name)
 			continue
 		}
+
 		if path, err := exec.LookPath(name); err == nil {
 			fmt.Fprintf(out, "%s is %s\n", name, path)
 			continue

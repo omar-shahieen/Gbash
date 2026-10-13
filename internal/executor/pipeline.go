@@ -6,9 +6,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 
-	"github.com/omar-shahieen/Gbash/internal/builtins"
-	"github.com/omar-shahieen/Gbash/internal/shell"
+	"github.com/omar-shahieen/gbash/internal/builtins"
+	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
 // pipelineStage keeps one command, its process record, and its pipe ownership together.
@@ -71,7 +72,7 @@ func preparePipeline(sh *shell.Shell, job *shell.Job) ([]pipelineStage, error) {
 	stages := make([]pipelineStage, len(job.Pipeline.Commands))
 	for i, cmd := range job.Pipeline.Commands {
 		stages[i] = pipelineStage{index: i, command: cmd, streams: shellStreams(sh)}
-		if _, builtin := builtins.Lookup(cmd.Name); cmd.Name != "" && !builtin {
+		if cmd.Name != "" {
 			process := &shell.Process{Command: cmd, Stage: i}
 			stages[i].process = process
 			job.Processes = append(job.Processes, process)
@@ -93,8 +94,8 @@ func preparePipeline(sh *shell.Shell, job *shell.Job) ([]pipelineStage, error) {
 	return stages, nil
 }
 
-// startStage starts an external program now and returns its one-use completion function.
-// Built-ins execute inside that function so pipeline producers and consumers run together.
+// startStage launches a program or built-in as a child and returns its one-use
+// completion function, which waits for termination and closes redirection files.
 func startStage(sh *shell.Shell, job *shell.Job, stage pipelineStage, group *ProcessGroup) func() int {
 	streams, err := prepareRedirections(stage.command, stage.streams)
 	if err != nil {
@@ -105,13 +106,7 @@ func startStage(sh *shell.Shell, job *shell.Job, stage pipelineStage, group *Pro
 		streams.close()
 		return func() int { return 0 }
 	}
-	if builtin, ok := builtins.Lookup(stage.command.Name); ok {
-		return func() int {
-			defer streams.close()
-			return builtin(sh, stage.command.Args, streams.stdout, streams.stderr)
-		}
-	}
-	process, err := startExternalCommand(stage.command, streams, group)
+	process, err := startChildCommand(stage.command, streams, group, sh.LastStatus)
 	if err != nil {
 		status := reportLaunchError(stage.command.Name, err, streams.stderr)
 		streams.close()
@@ -133,17 +128,37 @@ func failedStage(process *shell.Process, status int) func() int {
 	return func() int { return status }
 }
 
-func startExternalCommand(cmd shell.Command, streams commandStreams, group *ProcessGroup) (*os.Process, error) {
-	path, err := exec.LookPath(cmd.Name)
-	if err != nil {
-		return nil, err
+func startChildCommand(cmd shell.Command, streams commandStreams, group *ProcessGroup, lastStatus int) (*os.Process, error) {
+	var path string
+	var err error
+	var args []string
+	if _, ok := builtins.Lookup(cmd.Name); ok {
+		path, err = os.Executable()
+		if err != nil {
+			return nil, err
+		}
+		args = append(
+			[]string{path, "--builtin-child",
+				strconv.Itoa(lastStatus),
+				cmd.Name},
+			cmd.Args...,
+		)
+
+	} else {
+		path, err = exec.LookPath(cmd.Name)
+		if err != nil {
+			return nil, err
+		}
+		args = append([]string{cmd.Name}, cmd.Args...)
+
 	}
+
 	files, err := streams.childFiles()
 	if err != nil {
 		return nil, err
 	}
-	args := append([]string{cmd.Name}, cmd.Args...)
 	return group.launch(path, args, files)
+
 }
 
 func reportLaunchError(name string, err error, output io.Writer) int {

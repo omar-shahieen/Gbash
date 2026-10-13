@@ -1,8 +1,9 @@
 package builtins
 
 import (
-	"github.com/omar-shahieen/Gbash/internal/shell"
 	"io"
+
+	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
 // Func is the built-in contract: state, args (without the command name),
@@ -29,4 +30,10 @@ func init() {
 func Lookup(name string) (Func, bool) {
 	fn, ok := table[name]
 	return fn, ok
+}
+func IsJobControl(name string) bool {
+	if name == "fg" || name == "bg" || name == "wait" {
+		return true
+	}
+	return false
 }

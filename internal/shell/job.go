@@ -20,7 +20,6 @@ type Job struct {
 	JobID         int
 	PGID          int
 	Pipeline      Pipeline
-	Stopped       bool
 	Processes     []*Process
 	CommandText   string
 	Background    bool
@@ -34,7 +33,53 @@ type JobEvent struct {
 	PID        int
 	State      ProcessState
 	ExitStatus int
-	Err        error
+}
+
+// Complete includes every stage, including built-ins without child processes.
+func (j *Job) Complete() bool {
+	for _, done := range j.StageDone {
+		if !done {
+			return false
+		}
+	}
+	return true
+}
+
+// ExitStatus is the pipeline result: the last stage's status.
+func (j *Job) ExitStatus() int {
+	if len(j.StageStatuses) == 0 {
+		return 0
+	}
+	return j.StageStatuses[len(j.StageStatuses)-1]
+}
+
+func (j *Job) MarkRunning() {
+	for _, process := range j.Processes {
+		if process.State == ProcessStopped {
+			process.State = ProcessRunning
+		}
+	}
+}
+
+// ApplyEvent is called by the shell's event receiver, never by child workers.
+func (j *Job) ApplyEvent(event JobEvent) {
+	if event.JobID != j.JobID || event.Stage < 0 ||
+		event.Stage >= len(j.StageDone) || event.Stage >= len(j.StageStatuses) {
+		return
+	}
+	for _, process := range j.Processes {
+		if process.Stage == event.Stage {
+			process.State = event.State
+			if event.State == ProcessDone {
+				process.ExitStatus = event.ExitStatus
+			}
+			break
+		}
+	}
+	if event.State == ProcessDone {
+		j.StageDone[event.Stage] = true
+		j.StageStatuses[event.Stage] = event.ExitStatus
+	}
 }
 
 func (j *Job) State() ProcessState {

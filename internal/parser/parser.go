@@ -53,7 +53,7 @@ func ParseRedirections(tokens []Token) ([]string, []shell.Redirection, error) {
 	return words, redirs, nil
 }
 
-// Parse builds one command.
+// ParseCommand builds one command from its arguments and redirections.
 func ParseCommand(tokens []Token) (shell.Command, error) {
 	words, redirs, err := ParseRedirections(tokens)
 	if err != nil {
@@ -75,7 +75,7 @@ func ParsePipeline(tokens []Token) (shell.Pipeline, error) {
 		return shell.Pipeline{}, fmt.Errorf("syntax error: empty pipeline")
 	}
 
-	if len(tokens) > 0 && tokens[len(tokens)-1].Type == Background {
+	if tokens[len(tokens)-1].Type == Background {
 		pipeline.Background = true
 		tokens = tokens[:len(tokens)-1]
 	}
@@ -85,37 +85,23 @@ func ParsePipeline(tokens []Token) (shell.Pipeline, error) {
 			fmt.Errorf("syntax error: missing command before &")
 	}
 	start := 0
-	for i, token := range tokens {
-		if token.Type != Pipe {
+	// Treat the end of input like a separator, so every stage follows one path.
+	for i := 0; i <= len(tokens); i++ {
+		if i < len(tokens) && tokens[i].Type != Pipe {
 			continue
 		}
-
-		// Reject a pipe without a command before it.
 		if i == start {
+			if i == len(tokens) {
+				return shell.Pipeline{}, fmt.Errorf("syntax error: empty command after pipe")
+			}
 			return shell.Pipeline{}, fmt.Errorf("syntax error: empty command before pipe")
 		}
-
 		cmd, err := ParseCommand(tokens[start:i])
 		if err != nil {
 			return shell.Pipeline{}, err
 		}
-
 		pipeline.Commands = append(pipeline.Commands, cmd)
 		start = i + 1
 	}
-
-	// Reject a trailing pipe.
-	if start == len(tokens) {
-		return shell.Pipeline{}, fmt.Errorf("syntax error: empty command after pipe")
-	}
-
-	// Parse the final command (or the only command).
-	cmd, err := ParseCommand(tokens[start:])
-	if err != nil {
-		return shell.Pipeline{}, err
-	}
-
-	pipeline.Commands = append(pipeline.Commands, cmd)
-
 	return pipeline, nil
 }

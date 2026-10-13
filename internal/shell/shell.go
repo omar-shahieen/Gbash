@@ -2,7 +2,9 @@ package shell
 
 import (
 	"io"
+	"maps"
 	"os"
+	"slices"
 )
 
 // Shell holds all mutable state that built-ins and the executor need.
@@ -27,6 +29,13 @@ type Shell struct {
 	Interactive bool
 	Terminal    *os.File
 	ShellPGID   int
+}
+
+// JobIDs gives callers a stable order and a snapshot safe to iterate while removing jobs.
+func (sh *Shell) JobIDs() []int {
+	ids := slices.Collect(maps.Keys(sh.Jobs))
+	slices.Sort(ids)
+	return ids
 }
 
 func New() *Shell {

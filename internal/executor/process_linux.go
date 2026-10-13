@@ -5,25 +5,19 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sync"
 	"syscall"
 	"unsafe"
 
 	"github.com/omar-shahieen/Gbash/internal/shell"
 )
 
-// ProcessGroup is shared by all stages of one pipeline. The first external
-// process to start becomes the group leader; the others join its group.
+// ProcessGroup launches a pipeline sequentially from the main shell.
+// The first child creates the group; later children join it.
 type ProcessGroup struct {
-	mu sync.Mutex
 	id int
 
 	foreground bool
 	ttyFD      int
-	// onLeader, if set, is called once with the group id as soon as the
-	// leader has started. It runs while the mutex is held, so it must not
-	// call back into the ProcessGroup.
-	onLeader func(pgid int)
 }
 
 func (g *ProcessGroup) launch(
@@ -31,9 +25,6 @@ func (g *ProcessGroup) launch(
 	args []string,
 	files []*os.File,
 ) (*os.Process, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
 	attr := &os.ProcAttr{
 		Env:   os.Environ(),
 		Files: files,
@@ -51,9 +42,6 @@ func (g *ProcessGroup) launch(
 	}
 	if g.id == 0 {
 		g.id = proc.Pid
-		if g.onLeader != nil {
-			g.onLeader(g.id)
-		}
 	}
 	return proc, nil
 }

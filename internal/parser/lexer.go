@@ -54,27 +54,23 @@ func Tokenize(input string) ([]Token, error) {
 			tokens = append(tokens, Token{RedirIn, "<"})
 
 		case r == '>':
-			isAppend := i+1 < len(runes) && runes[i+1] == '>'
-
-			// A lone "2" glued to ">" is the stderr operator.
-			if word.String() == "2" {
+			kind, value := RedirOut, ">"
+			stderr := word.String() == "2"
+			if stderr {
 				word.Reset()
-				if isAppend {
-					tokens = append(tokens, Token{RedirErrAppend, "2>>"})
-					i++
-				} else {
-					tokens = append(tokens, Token{RedirErr, "2>"})
-				}
-				continue
-			}
-
-			flush()
-			if isAppend {
-				tokens = append(tokens, Token{RedirAppend, ">>"})
-				i++
+				kind, value = RedirErr, "2>"
 			} else {
-				tokens = append(tokens, Token{RedirOut, ">"})
+				flush()
 			}
+			if i+1 < len(runes) && runes[i+1] == '>' {
+				i++
+				value += ">"
+				kind = RedirAppend
+				if stderr {
+					kind = RedirErrAppend
+				}
+			}
+			tokens = append(tokens, Token{kind, value})
 
 		default:
 			word.WriteRune(r)

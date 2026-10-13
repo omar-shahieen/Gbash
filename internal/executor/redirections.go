@@ -8,55 +8,73 @@ import (
 	"github.com/omar-shahieen/Gbash/internal/shell"
 )
 
-func prepareRedirections(
-	cmd shell.Command,
-	in io.Reader,
-	out, errOut io.Writer,
-) (
-	io.Reader,
-	io.Writer,
-	io.Writer,
-	func(),
-	error,
-) {
-	var files []*os.File
-
-	cleanup := func() {
-		for _, f := range files {
-			_ = f.Close()
-		}
-	}
-
-	for _, r := range cmd.Redirections {
-		f, err := openRedirection(r)
-		if err != nil {
-			cleanup()
-			return nil, nil, nil, nil,
-				fmt.Errorf("%s: %w", r.Filename, err)
-		}
-		files = append(files, f)
-
-		switch r.FD {
-		case 0:
-			in = f
-		case 1:
-			out = f
-		case 2:
-			errOut = f
-		}
-	}
-
-	return in, out, errOut, cleanup, nil
-
+// commandStreams names a command's streams and owns only its redirection files.
+// Pipeline pipe ends are owned separately by their stages.
+type commandStreams struct {
+	stdin  io.Reader
+	stdout io.Writer
+	stderr io.Writer
+	opened []*os.File
 }
 
-func openRedirection(r shell.Redirection) (*os.File, error) {
-	switch r.Mode {
+func shellStreams(sh *shell.Shell) commandStreams {
+	return commandStreams{stdin: sh.Stdin, stdout: sh.Stdout, stderr: sh.Stderr}
+}
+
+func (streams commandStreams) close() {
+	for _, file := range streams.opened {
+		_ = file.Close()
+	}
+}
+
+func prepareRedirections(cmd shell.Command, streams commandStreams) (commandStreams, error) {
+	for _, redirection := range cmd.Redirections {
+		file, err := openRedirection(redirection)
+		if err != nil {
+			streams.close()
+			return commandStreams{}, fmt.Errorf("%s: %w", redirection.Filename, err)
+		}
+		streams.opened = append(streams.opened, file)
+		switch redirection.FD {
+		case 0:
+			streams.stdin = file
+		case 1:
+			streams.stdout = file
+		case 2:
+			streams.stderr = file
+		}
+	}
+	return streams, nil
+}
+
+// childFiles converts the streams to the descriptors required by os.StartProcess.
+func (streams commandStreams) childFiles() ([]*os.File, error) {
+	inputs := []struct {
+		name   string
+		stream any
+	}{
+		{"stdin", streams.stdin},
+		{"stdout", streams.stdout},
+		{"stderr", streams.stderr},
+	}
+	files := make([]*os.File, len(inputs))
+	for i, input := range inputs {
+		file, ok := input.stream.(*os.File)
+		if !ok || file == nil {
+			return nil, fmt.Errorf("%s must be an *os.File", input.name)
+		}
+		files[i] = file
+	}
+	return files, nil
+}
+
+func openRedirection(redirection shell.Redirection) (*os.File, error) {
+	switch redirection.Mode {
 	case shell.ModeRead:
-		return os.Open(r.Filename)
+		return os.Open(redirection.Filename)
 	case shell.ModeAppend:
-		return os.OpenFile(r.Filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	default: // ModeTruncate
-		return os.OpenFile(r.Filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		return os.OpenFile(redirection.Filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	default:
+		return os.OpenFile(redirection.Filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	}
 }

@@ -122,13 +122,16 @@ func startPipeline(sh *shell.Shell, pipeline shell.Pipeline) func() int {
 		return func() int { return 0 }
 	}
 	job := &shell.Job{
+		JobID:         sh.NextJobID,
 		Pipeline:      pipeline,
 		StageDone:     make([]bool, n),
 		StageStatuses: make([]int, n),
 		Background:    pipeline.Background,
+		CommandText:   pipeline.CommandText,
 	}
-	job.JobID = sh.NextJobID
+
 	sh.NextJobID++
+
 	if !job.Background {
 		sh.ForegroundJob = job
 	}

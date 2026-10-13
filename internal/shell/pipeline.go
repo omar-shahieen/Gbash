@@ -21,6 +21,7 @@ type Command struct {
 }
 
 type Pipeline struct {
-	Commands   []Command
-	Background bool
+	Commands    []Command
+	Background  bool
+	CommandText string
 }

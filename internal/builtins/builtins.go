@@ -243,11 +243,8 @@ func jobsCmd(
 		if !exists {
 			continue
 		}
-		fmt.Fprintf(out, "[%d] %s pgid=%d\n",
-			job.JobID,
-			job.State(),
-			job.PGID,
-		)
+		fmt.Fprintf(out, "[%d] %s pgid=%d %s\n",
+			job.JobID, job.State(), job.PGID, job.CommandText)
 	}
 	return 0
 

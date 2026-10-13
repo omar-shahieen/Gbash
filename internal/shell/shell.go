@@ -22,6 +22,7 @@ type Shell struct {
 	Jobs          map[int]*Job
 	NextJobID     int
 	JobEvents     chan JobEvent
+	Shutdown      <-chan struct{}
 
 	Interactive bool
 	Terminal    *os.File

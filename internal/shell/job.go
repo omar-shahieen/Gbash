@@ -26,6 +26,7 @@ type Job struct {
 	Background    bool
 	StageDone     []bool
 	StageStatuses []int
+	Notified      bool
 }
 type JobEvent struct {
 	JobID      int

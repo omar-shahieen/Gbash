@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -8,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/omar-shahieen/Gbash/internal/shell"
 )
@@ -220,8 +222,12 @@ func waitForegroundJob(sh *shell.Shell, job *shell.Job) int {
 		return 0
 	}
 	for !jobComplete(job) {
-		event := <-sh.JobEvents
-		applyJobEvent(sh, event)
+		select {
+		case <-sh.Shutdown:
+			return 128 + int(syscall.SIGTERM)
+		case event := <-sh.JobEvents:
+			applyJobEvent(sh, event)
+		}
 		if sh.Interactive && job.State() == shell.ProcessStopped {
 			return 128 + int(syscall.SIGTSTP)
 		}
@@ -238,8 +244,12 @@ func waitJob(sh *shell.Shell, job *shell.Job) int {
 		return 0
 	}
 	for !jobComplete(job) {
-		event := <-sh.JobEvents
-		applyJobEvent(sh, event)
+		select {
+		case <-sh.Shutdown:
+			return 128 + int(syscall.SIGTERM)
+		case event := <-sh.JobEvents:
+			applyJobEvent(sh, event)
+		}
 
 	}
 
@@ -261,8 +271,12 @@ func waitProcess(
 		return 1
 	}
 	for !job.StageDone[record.Stage] {
-		event := <-sh.JobEvents
-		applyJobEvent(sh, event)
+		select {
+		case <-sh.Shutdown:
+			return 128 + int(syscall.SIGTERM)
+		case event := <-sh.JobEvents:
+			applyJobEvent(sh, event)
+		}
 
 	}
 	if jobComplete(job) {
@@ -385,4 +399,86 @@ func jobComplete(job *shell.Job) bool {
 		}
 	}
 	return true
+}
+
+func NotifyCompletedJobs(sh *shell.Shell) {
+	drainJobEvents(sh)
+
+	jobIDs := slices.Collect(maps.Keys(sh.Jobs))
+	slices.Sort(jobIDs)
+
+	for _, jobID := range jobIDs {
+
+		job, exists := sh.Jobs[jobID]
+
+		if !exists {
+			continue
+		}
+
+		if jobComplete(job) && !job.Notified {
+			fmt.Fprintf(sh.Stdout, "[%d] Done %s\n",
+				job.JobID, job.CommandText)
+			job.Notified = true
+		}
+
+	}
+
+}
+
+func signalJobsOnExit(sh *shell.Shell) error {
+
+	drainJobEvents(sh)
+
+	jobs := slices.Collect(maps.Values(sh.Jobs))
+
+	var errs []error
+
+	for _, job := range jobs {
+		if jobComplete(job) || job.PGID <= 0 {
+			continue
+		}
+
+		err := syscall.Kill(-job.PGID, syscall.SIGHUP)
+		if err != nil && !errors.Is(err, syscall.ESRCH) {
+			errs = append(errs, err)
+		}
+		if job.State() == shell.ProcessStopped {
+			err := syscall.Kill(-job.PGID, syscall.SIGCONT)
+			if err != nil && !errors.Is(err, syscall.ESRCH) {
+				errs = append(errs, err)
+			}
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+func ShutdownJobs(sh *shell.Shell, timeout time.Duration) error {
+
+	signalErr := signalJobsOnExit(sh)
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		allDone := true
+		for _, job := range sh.Jobs {
+			if !jobComplete(job) {
+				allDone = false
+				break
+			}
+		}
+		if allDone {
+			return signalErr
+		}
+
+		select {
+		case event := <-sh.JobEvents:
+			applyJobEvent(sh, event)
+
+		case <-timer.C:
+			return errors.Join(signalErr,
+				fmt.Errorf("timed out waiting for jobs to exit"))
+		}
+	}
+
 }

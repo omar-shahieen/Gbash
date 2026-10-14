@@ -7,7 +7,7 @@ import (
 	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
-// Execute is the entry point the shell loop calls for one parsed line.
+// Execute runs one pipeline, either in the foreground or background.
 func Execute(sh *shell.Shell, pipeline shell.Pipeline) int {
 	drainJobEvents(sh)
 

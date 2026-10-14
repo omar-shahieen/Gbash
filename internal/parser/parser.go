@@ -6,19 +6,6 @@ import (
 	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
-type RunCondition int
-
-const (
-	RunAlways RunCondition = iota
-	RunOnSuccess
-	RunOnFailure
-)
-
-type ListEntry struct {
-	Tokens    []Token
-	Condition RunCondition
-}
-
 // redirTable maps each operator token to its fd and mode, once.
 var redirTable = map[TokenKind]struct {
 	fd   int
@@ -117,67 +104,4 @@ func ParsePipeline(tokens []Token) (shell.Pipeline, error) {
 		start = i + 1
 	}
 	return pipeline, nil
-}
-
-func ParseList(tokens []Token) ([]ListEntry, error) {
-	if len(tokens) == 0 {
-		return nil, fmt.Errorf("syntax error: empty list")
-	}
-
-	var list []ListEntry
-	start := 0
-	condition := RunAlways
-	chainHasConditional := false
-	appendEntry := func(segment []Token) error {
-		_, err := ParsePipeline(segment)
-		if err != nil {
-			return err
-		}
-		list = append(list, ListEntry{Tokens: segment, Condition: condition})
-		return nil
-	}
-
-	for i, tok := range tokens {
-		if tok.Type != AndIf && tok.Type != OrIf && tok.Type != Semicolon && tok.Type != Background {
-			continue
-		}
-		if i == start {
-			return nil, fmt.Errorf("syntax error: empty command before %s", tok.Value)
-		}
-		var err error
-		if tok.Type == Background {
-			if chainHasConditional {
-				return nil, fmt.Errorf("syntax error: background conditional chains are not supported")
-			}
-			err = appendEntry(tokens[start : i+1])
-		} else {
-			err = appendEntry(tokens[start:i])
-		}
-
-		if err != nil {
-			return nil, err
-		}
-		switch tok.Type {
-		case AndIf:
-			chainHasConditional = true
-			condition = RunOnSuccess
-		case OrIf:
-			chainHasConditional = true
-			condition = RunOnFailure
-		default:
-			chainHasConditional = false
-			condition = RunAlways
-		}
-		start = i + 1
-	}
-
-	if start < len(tokens) {
-		if err := appendEntry(tokens[start:]); err != nil {
-			return nil, err
-		}
-	} else if last := tokens[len(tokens)-1].Type; last != Semicolon && last != Background {
-		return nil, fmt.Errorf("syntax error: missing pipeline after conditional operator")
-	}
-
-	return list, nil
 }

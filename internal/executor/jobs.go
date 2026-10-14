@@ -9,6 +9,18 @@ import (
 	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
+// registerJob assigns an ID above every retained job. IDs can be reused after
+// jobs are removed, while the newest job still has the highest ID.
+func registerJob(sh *shell.Shell, job *shell.Job) {
+	job.JobID = 1
+	for id := range sh.Jobs {
+		if id >= job.JobID {
+			job.JobID = id + 1
+		}
+	}
+	sh.Jobs[job.JobID] = job
+}
+
 // Workers publish events. Only the main shell receives them and updates jobs.
 func applyJobEvent(sh *shell.Shell, event shell.JobEvent) {
 	if job, exists := sh.Jobs[event.JobID]; exists {

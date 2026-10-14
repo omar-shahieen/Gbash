@@ -28,6 +28,7 @@ func ExpandTokens(
 	}
 	return expanded, nil
 }
+
 func expandWord(
 	token Token,
 	lookup func(string) string,
@@ -51,6 +52,7 @@ func expandWord(
 	}
 	return result.String(), nil
 }
+
 func expandText(
 	text string,
 	lookup func(string) string,

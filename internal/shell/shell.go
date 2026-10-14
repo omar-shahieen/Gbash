@@ -10,10 +10,10 @@ import (
 // Shell holds all mutable state that built-ins and the executor need.
 type Shell struct {
 	LastStatus int
+	History    []string
 
 	// Set by the exit built-in; the main loop checks these.
-	Exiting bool
-
+	Exiting  bool
 	ExitCode int
 
 	Stdin  io.Reader
@@ -22,10 +22,10 @@ type Shell struct {
 
 	ForegroundJob     *Job
 	Jobs              map[int]*Job
-	NextJobID         int
 	LastBackgroundPID int
 	JobEvents         chan JobEvent
 	Shutdown          <-chan struct{}
+	ChildPGID         int // Nonzero in a chain child; its commands join this group.
 
 	Interactive bool
 	Terminal    *os.File
@@ -41,12 +41,10 @@ func (sh *Shell) JobIDs() []int {
 
 func New() *Shell {
 	return &Shell{
-		Stdin:         os.Stdin,
-		Stdout:        os.Stdout,
-		Stderr:        os.Stderr,
-		ForegroundJob: nil,
-		Jobs:          make(map[int]*Job),
-		NextJobID:     1,
-		JobEvents:     make(chan JobEvent, 64),
+		Stdin:     os.Stdin,
+		Stdout:    os.Stdout,
+		Stderr:    os.Stderr,
+		Jobs:      make(map[int]*Job),
+		JobEvents: make(chan JobEvent, 64),
 	}
 }

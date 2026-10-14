@@ -33,15 +33,13 @@ func executePipeline(sh *shell.Shell, pipeline shell.Pipeline) int {
 		return 0
 	}
 	job := &shell.Job{
-		JobID:         sh.NextJobID,
 		Pipeline:      pipeline,
 		StageDone:     make([]bool, len(pipeline.Commands)),
 		StageStatuses: make([]int, len(pipeline.Commands)),
 		Background:    pipeline.Background,
 		CommandText:   pipeline.CommandText,
 	}
-	sh.NextJobID++
-	sh.Jobs[job.JobID] = job
+	registerJob(sh, job)
 
 	stages, err := preparePipeline(sh, job)
 	if err != nil {
@@ -49,7 +47,7 @@ func executePipeline(sh *shell.Shell, pipeline shell.Pipeline) int {
 		fmt.Fprintf(sh.Stderr, "minishell: pipe: %v\n", err)
 		return 1
 	}
-	group := &ProcessGroup{}
+	group := &processGroup{id: sh.ChildPGID}
 	if sh.Interactive {
 		group.foreground = !job.Background
 		group.ttyFD = int(sh.Terminal.Fd())
@@ -102,7 +100,7 @@ func preparePipeline(sh *shell.Shell, job *shell.Job) ([]pipelineStage, error) {
 
 // startStage launches a program or built-in as a child and returns its one-use
 // completion function, which waits for termination and closes redirection files.
-func startStage(sh *shell.Shell, job *shell.Job, stage pipelineStage, group *ProcessGroup) func() int {
+func startStage(sh *shell.Shell, job *shell.Job, stage pipelineStage, group *processGroup) func() int {
 	streams, err := prepareRedirections(stage.command, stage.streams)
 	if err != nil {
 		fmt.Fprintf(sh.Stderr, "minishell: %v\n", err)
@@ -134,7 +132,7 @@ func failedStage(process *shell.Process, status int) func() int {
 	return func() int { return status }
 }
 
-func startChildCommand(cmd shell.Command, streams commandStreams, group *ProcessGroup, lastStatus int) (*os.Process, error) {
+func startChildCommand(cmd shell.Command, streams commandStreams, group *processGroup, lastStatus int) (*os.Process, error) {
 	var path string
 	var err error
 	var args []string
@@ -149,14 +147,12 @@ func startChildCommand(cmd shell.Command, streams commandStreams, group *Process
 				cmd.Name},
 			cmd.Args...,
 		)
-
 	} else {
 		path, err = exec.LookPath(cmd.Name)
 		if err != nil {
 			return nil, err
 		}
 		args = append([]string{cmd.Name}, cmd.Args...)
-
 	}
 
 	files, err := streams.childFiles()
@@ -164,7 +160,6 @@ func startChildCommand(cmd shell.Command, streams commandStreams, group *Process
 		return nil, err
 	}
 	return group.launch(path, args, files)
-
 }
 
 func reportLaunchError(name string, err error, output io.Writer) int {

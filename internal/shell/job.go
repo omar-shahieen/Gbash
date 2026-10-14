@@ -35,7 +35,7 @@ type JobEvent struct {
 	ExitStatus int
 }
 
-// Complete includes every stage, including built-ins without child processes.
+// Complete includes every stage, including commands containing only redirections.
 func (j *Job) Complete() bool {
 	for _, done := range j.StageDone {
 		if !done {

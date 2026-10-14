@@ -1,23 +1,16 @@
-package main
+package app
 
 import (
 	"bytes"
 	"context"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestBackgroundSequences(t *testing.T) {
-	// Use the real binary so child builtins enter --builtin-child mode.
-	binary := filepath.Join(t.TempDir(), "minibash")
-	buildContext, cancelBuild := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancelBuild()
-	if output, err := exec.CommandContext(buildContext, "go", "build", "-o", binary, ".").CombinedOutput(); err != nil {
-		t.Fatalf("build minibash: %v\n%s", err, output)
-	}
+	binary := buildTestShell(t)
 
 	for _, tc := range []struct {
 		name, input string
@@ -40,6 +33,15 @@ func TestBackgroundSequences(t *testing.T) {
 		{"background builtin pipeline", "echo piped | cat & wait; jobs", []string{"piped"}},
 		{"background output redirection", "echo redirected > result & wait; cat result", []string{"redirected"}},
 		{"wait without jobs", "wait; echo $?", []string{"0"}},
+		{"foreground does not consume job ID", "true; exit 7 & wait %1; echo status=$?", []string{"status=7"}},
+		{"empty table restarts job IDs", "exit 3 & wait %1; exit 9 & wait %1; echo status=$?; jobs", []string{"status=9"}},
+		{"retained job ID stays stable", "sleep 0.1 & true; exit 9 & wait %2; echo second=$?; wait %1; echo first=$?; jobs", []string{"second=9", "first=0"}},
+		{"background conditional fallback", "false || echo fallback & wait", []string{"fallback"}},
+		{"background chain environment isolation", "export MINIBASH_BG_CHECK=parent; export MINIBASH_BG_CHECK=child && echo \"$MINIBASH_BG_CHECK\" & wait; echo \"$MINIBASH_BG_CHECK\"", []string{"child", "parent"}},
+		{"background chain exit status", "true && exit 7 & wait $!; echo status=$?; jobs", []string{"status=7"}},
+		{"background chain skips expansion", "true || echo ${ & wait $!; echo status=$?", []string{"status=0"}},
+		{"independent background chain statuses", "true && exit 3 & true && exit 9 & wait %2; echo second=$?; wait %1; echo first=$?; jobs", []string{"second=9", "first=3"}},
+		{"independent background chain environments", "export MINIBASH_BG_CHECK=parent; export MINIBASH_BG_CHECK=first && echo \"$MINIBASH_BG_CHECK\" > first & export MINIBASH_BG_CHECK=second && echo \"$MINIBASH_BG_CHECK\" > second & wait; cat first second; echo \"$MINIBASH_BG_CHECK\"", []string{"first", "second", "parent"}},
 		{"wait using background PID", "exit 7 & wait $!; echo status=$?; jobs", []string{"status=7"}},
 		{"wait using last pipeline PID", "sh -c 'exit 3' | sh -c 'exit 9' & wait $!; echo status=$?; wait; jobs", []string{"status=9"}},
 		{"latest background PID", "exit 3 & exit 9 & wait $!; echo status=$?; wait; jobs", []string{"status=9"}},

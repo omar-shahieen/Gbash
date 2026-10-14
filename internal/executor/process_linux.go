@@ -6,21 +6,20 @@ import (
 	"io"
 	"os"
 	"syscall"
-	"unsafe"
 
 	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
-// ProcessGroup launches a pipeline sequentially from the main shell.
-// The first child creates the group; later children join it.
-type ProcessGroup struct {
+// processGroup launches a pipeline sequentially from the main shell.
+// A zero group ID creates a group for the first child; otherwise children join it.
+type processGroup struct {
 	id int
 
 	foreground bool
 	ttyFD      int
 }
 
-func (g *ProcessGroup) launch(
+func (g *processGroup) launch(
 	path string,
 	args []string,
 	files []*os.File,
@@ -44,58 +43,6 @@ func (g *ProcessGroup) launch(
 		g.id = proc.Pid
 	}
 	return proc, nil
-}
-
-func InitTerminal(sh *shell.Shell) error {
-	terminal, ok := sh.Stdin.(*os.File)
-	if !ok {
-		return nil
-	}
-	_, err := terminalForegroundPGID(terminal.Fd())
-	if errors.Is(err, syscall.ENOTTY) {
-		// Not a terminal, so nothing to do.
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
-	sh.Interactive = true
-	sh.Terminal = terminal
-	sh.ShellPGID = syscall.Getpgrp()
-	return nil
-}
-
-func terminalForegroundPGID(fd uintptr) (int, error) {
-	var pgid int32
-
-	_, _, errno := syscall.Syscall(
-		syscall.SYS_IOCTL,
-		fd,
-		uintptr(syscall.TIOCGPGRP),
-		uintptr(unsafe.Pointer(&pgid)),
-	)
-	if errno != 0 {
-		return 0, errno
-	}
-
-	return int(pgid), nil
-}
-
-func setTerminalForegroundPGID(fd uintptr, pgid int) error {
-	group := int32(pgid)
-
-	_, _, errno := syscall.Syscall(
-		syscall.SYS_IOCTL,
-		fd,
-		uintptr(syscall.TIOCSPGRP),
-		uintptr(unsafe.Pointer(&group)),
-	)
-	if errno != 0 {
-		return errno
-	}
-
-	return nil
 }
 
 func watchExternalCommand(

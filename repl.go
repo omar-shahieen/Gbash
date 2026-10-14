@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -79,15 +80,47 @@ func executeLine(sh *shell.Shell, line string, running *atomic.Bool) {
 	if len(tokens) == 0 {
 		return
 	}
-	pipeline, err := parser.ParsePipeline(tokens)
+
+	list, err := parser.ParseList(tokens)
 	if err != nil {
 		reportParseError(sh, err)
 		return
 	}
-	pipeline.CommandText = text
-	running.Store(true)
-	defer running.Store(false)
-	sh.LastStatus = executor.Execute(sh, pipeline)
+	for _, entry := range list {
+		if sh.Exiting || shutdownRequested(sh.Shutdown) {
+			return
+		}
+		if !shouldRun(entry.Condition, sh.LastStatus) {
+			continue
+		}
+		entryTokens, err := parser.ExpandTokens(entry.Tokens, os.Getenv, sh.LastStatus)
+		if err != nil {
+			reportParseError(sh, err)
+			return
+		}
+		pipeline, err := parser.ParsePipeline(entryTokens)
+		if err != nil {
+			reportParseError(sh, err)
+			return
+		}
+		pipeline.CommandText = text
+		running.Store(true)
+		sh.LastStatus = executor.Execute(sh, pipeline)
+		running.Store(false)
+	}
+}
+
+func shouldRun(condition parser.RunCondition, lastStatus int) bool {
+	switch condition {
+	case parser.RunAlways:
+		return true
+	case parser.RunOnSuccess:
+		return lastStatus == 0
+	case parser.RunOnFailure:
+		return lastStatus != 0
+	default:
+		return false
+	}
 }
 
 func reportParseError(sh *shell.Shell, err error) {

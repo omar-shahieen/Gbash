@@ -6,6 +6,19 @@ import (
 	"github.com/omar-shahieen/gbash/internal/shell"
 )
 
+type RunCondition int
+
+const (
+	RunAlways RunCondition = iota
+	RunOnSuccess
+	RunOnFailure
+)
+
+type ListEntry struct {
+	Tokens    []Token
+	Condition RunCondition
+}
+
 // redirTable maps each operator token to its fd and mode, once.
 var redirTable = map[TokenKind]struct {
 	fd   int
@@ -104,4 +117,57 @@ func ParsePipeline(tokens []Token) (shell.Pipeline, error) {
 		start = i + 1
 	}
 	return pipeline, nil
+}
+
+func ParseList(tokens []Token) ([]ListEntry, error) {
+	if len(tokens) == 0 {
+		return nil, fmt.Errorf("syntax error: empty list")
+	}
+
+	var list []ListEntry
+	start := 0
+	condition := RunAlways
+	hasBackground := false
+	appendEntry := func(segment []Token) error {
+		pipeline, err := ParsePipeline(segment)
+		if err != nil {
+			return err
+		}
+		hasBackground = hasBackground || pipeline.Background
+		list = append(list, ListEntry{Tokens: segment, Condition: condition})
+		return nil
+	}
+
+	for i, tok := range tokens {
+		if tok.Type != AndIf && tok.Type != OrIf && tok.Type != Semicolon {
+			continue
+		}
+		if i == start {
+			return nil, fmt.Errorf("syntax error: empty command before %s", tok.Value)
+		}
+		if err := appendEntry(tokens[start:i]); err != nil {
+			return nil, err
+		}
+		switch tok.Type {
+		case AndIf:
+			condition = RunOnSuccess
+		case OrIf:
+			condition = RunOnFailure
+		default:
+			condition = RunAlways
+		}
+		start = i + 1
+	}
+
+	if start < len(tokens) {
+		if err := appendEntry(tokens[start:]); err != nil {
+			return nil, err
+		}
+	} else if tokens[len(tokens)-1].Type != Semicolon {
+		return nil, fmt.Errorf("syntax error: missing pipeline after conditional operator")
+	}
+	if len(list) > 1 && hasBackground {
+		return nil, fmt.Errorf("syntax error: background pipelines are not supported in conditional lists")
+	}
+	return list, nil
 }

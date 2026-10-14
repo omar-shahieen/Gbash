@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/omar-shahieen/gbash/internal/shell"
@@ -21,6 +22,42 @@ func TestReadLineCanStopWhileInputIsBlocked(t *testing.T) {
 	result := readLine(bufio.NewReader(reader), shutdown)
 	if !errors.Is(result.err, context.Canceled) {
 		t.Fatalf("error = %v, want cancellation", result.err)
+	}
+}
+
+func TestConditionalExecution(t *testing.T) {
+	const missing = "minibash_unknown_command_875"
+	cases := []struct {
+		line, output string
+		status       int
+		exiting      bool
+	}{
+		{line: "echo yes && echo next", output: "yes\nnext\n"},
+		{line: "type " + missing + " && echo skipped", status: 1},
+		{line: "type " + missing + " || echo $?", output: "1\n"},
+		{line: "echo yes || echo skipped && echo final", output: "yes\nfinal\n"},
+		{line: "export MINIBASH_CONDITIONAL_CHECK=omar && echo \"$MINIBASH_CONDITIONAL_CHECK\"", output: "omar\n"},
+		{line: "echo yes || echo ${", output: "yes\n"},
+		{line: "echo before &&", status: 2},
+		{line: "echo before || cat >", status: 2},
+		{line: "exit 7 && echo unreachable", status: 7, exiting: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.line, func(t *testing.T) {
+			t.Setenv("MINIBASH_CONDITIONAL_CHECK", "initial")
+			sh := shell.New()
+			var output, diagnostics bytes.Buffer
+			sh.Stdout, sh.Stderr = &output, &diagnostics
+			var running atomic.Bool
+			executeLine(sh, tc.line, &running)
+			if output.String() != tc.output || sh.LastStatus != tc.status || sh.Exiting != tc.exiting {
+				t.Fatalf("output=%q, status=%d, exiting=%v; want %q, %d, %v",
+					output.String(), sh.LastStatus, sh.Exiting, tc.output, tc.status, tc.exiting)
+			}
+			if running.Load() {
+				t.Fatal("execution flag remained set")
+			}
+		})
 	}
 }
 

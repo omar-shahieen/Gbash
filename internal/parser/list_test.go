@@ -46,6 +46,75 @@ func TestParseListStandaloneBackground(t *testing.T) {
 	}
 }
 
+func TestParseListBackgroundSequences(t *testing.T) {
+	for _, tc := range []struct {
+		input      string
+		background []bool
+	}{
+		{"sleep 1 & echo ready", []bool{true, false}},
+		{"sleep 1 & sleep 2 &", []bool{true, true}},
+		{"echo ready; sleep 1 &", []bool{false, true}},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			tokens, err := Tokenize(tc.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			list, err := ParseList(tokens)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(list) != len(tc.background) {
+				t.Fatalf("entries = %d, want %d", len(list), len(tc.background))
+			}
+			for i, want := range tc.background {
+				pipeline, err := ParsePipeline(list[i].Tokens)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if pipeline.Background != want || list[i].Condition != RunAlways {
+					t.Errorf("entry %d: background = %v, condition = %v", i, pipeline.Background, list[i].Condition)
+				}
+			}
+		})
+	}
+}
+
+func TestParseListIndependentConditionalChains(t *testing.T) {
+	for _, tc := range []struct {
+		input      string
+		conditions []RunCondition
+		background []bool
+	}{
+		{"sleep 1 & true && echo ready", []RunCondition{RunAlways, RunAlways, RunOnSuccess}, []bool{true, false, false}},
+		{"true && echo ready; sleep 1 &", []RunCondition{RunAlways, RunOnSuccess, RunAlways}, []bool{false, false, true}},
+		{"false || echo ready; sleep 1 & echo done", []RunCondition{RunAlways, RunOnFailure, RunAlways, RunAlways}, []bool{false, false, true, false}},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			tokens, err := Tokenize(tc.input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			list, err := ParseList(tokens)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(list) != len(tc.conditions) {
+				t.Fatalf("entries = %d, want %d", len(list), len(tc.conditions))
+			}
+			for i, entry := range list {
+				pipeline, err := ParsePipeline(entry.Tokens)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if entry.Condition != tc.conditions[i] || pipeline.Background != tc.background[i] {
+					t.Errorf("entry %d: condition = %v, background = %v", i, entry.Condition, pipeline.Background)
+				}
+			}
+		})
+	}
+}
+
 func TestParseListPreservesExpansionParts(t *testing.T) {
 	tokens, err := Tokenize(`export NAME=omar && echo '$HOME' "$NAME"`)
 	if err != nil {
@@ -69,6 +138,8 @@ func TestParseListErrors(t *testing.T) {
 		"", "&& true", "|| true", "true &&", "true ||",
 		"true && || false", "true || && false", "true && && false",
 		"sleep 1 & && echo yes", "true && sleep 1 &", "true || sleep 1 &",
+		"true && sleep 1 & echo ready", "false || sleep 1 & echo ready",
+		"echo first; true && sleep 1 & echo ready",
 	} {
 		t.Run(input, func(t *testing.T) {
 			tokens, err := Tokenize(input)

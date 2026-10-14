@@ -20,11 +20,12 @@ type Shell struct {
 	Stdout io.Writer
 	Stderr io.Writer
 
-	ForegroundJob *Job
-	Jobs          map[int]*Job
-	NextJobID     int
-	JobEvents     chan JobEvent
-	Shutdown      <-chan struct{}
+	ForegroundJob     *Job
+	Jobs              map[int]*Job
+	NextJobID         int
+	LastBackgroundPID int
+	JobEvents         chan JobEvent
+	Shutdown          <-chan struct{}
 
 	Interactive bool
 	Terminal    *os.File

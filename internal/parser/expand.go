@@ -10,6 +10,7 @@ func ExpandTokens(
 	tokens []Token,
 	lookup func(string) string,
 	lastStatus int,
+	lastBackgroundPID int,
 ) ([]Token, error) {
 	var expanded []Token
 	for _, token := range tokens {
@@ -17,7 +18,7 @@ func ExpandTokens(
 			expanded = append(expanded, token)
 			continue
 		}
-		value, err := expandWord(token, lookup, lastStatus)
+		value, err := expandWord(token, lookup, lastStatus, lastBackgroundPID)
 		if err != nil {
 			return nil, err
 		}
@@ -31,6 +32,7 @@ func expandWord(
 	token Token,
 	lookup func(string) string,
 	lastStatus int,
+	lastBackgroundPID int,
 ) (string, error) {
 	if len(token.Parts) == 0 {
 		return token.Value, nil
@@ -38,7 +40,7 @@ func expandWord(
 	var result strings.Builder
 	for _, part := range token.Parts {
 		if part.Expand {
-			expanded, err := expandText(part.Text, lookup, lastStatus)
+			expanded, err := expandText(part.Text, lookup, lastStatus, lastBackgroundPID)
 			if err != nil {
 				return "", err
 			}
@@ -53,6 +55,7 @@ func expandText(
 	text string,
 	lookup func(string) string,
 	lastStatus int,
+	lastBackgroundPID int,
 ) (string, error) {
 	var result strings.Builder
 	for i := 0; i < len(text); {
@@ -64,6 +67,11 @@ func expandText(
 		switch text[i+1] {
 		case '?':
 			result.WriteString(strconv.Itoa(lastStatus))
+			i += 2
+		case '!':
+			if lastBackgroundPID > 0 {
+				result.WriteString(strconv.Itoa(lastBackgroundPID))
+			}
 			i += 2
 		case '{':
 			start := i + 2

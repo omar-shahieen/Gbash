@@ -93,7 +93,7 @@ func executeLine(sh *shell.Shell, line string, running *atomic.Bool) {
 		if !shouldRun(entry.Condition, sh.LastStatus) {
 			continue
 		}
-		entryTokens, err := parser.ExpandTokens(entry.Tokens, os.Getenv, sh.LastStatus)
+		entryTokens, err := parser.ExpandTokens(entry.Tokens, os.Getenv, sh.LastStatus, sh.LastBackgroundPID)
 		if err != nil {
 			reportParseError(sh, err)
 			return

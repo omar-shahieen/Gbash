@@ -62,6 +62,12 @@ func executePipeline(sh *shell.Shell, pipeline shell.Pipeline) int {
 	startStageWorkers(sh, job.JobID, stages)
 
 	if job.Background {
+		for i := len(job.Processes) - 1; i >= 0; i-- {
+			if job.Processes[i].PID > 0 {
+				sh.LastBackgroundPID = job.Processes[i].PID
+				break
+			}
+		}
 		fmt.Fprintf(sh.Stdout, "[%d] %d\n", job.JobID, job.PGID)
 		return 0
 	}

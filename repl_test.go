@@ -41,6 +41,11 @@ func TestConditionalExecution(t *testing.T) {
 		{line: "echo before &&", status: 2},
 		{line: "echo before || cat >", status: 2},
 		{line: "exit 7 && echo unreachable", status: 7, exiting: true},
+		{line: "echo one; echo two", output: "one\ntwo\n"},
+		{line: "type " + missing + "; echo next", output: "next\n"},
+		{line: "echo one;", output: "one\n"},
+		{line: "echo before;; echo after", status: 2},
+		{line: "exit 7; echo unreachable", status: 7, exiting: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.line, func(t *testing.T) {

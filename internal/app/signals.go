@@ -47,7 +47,7 @@ func handlePromptSignals(sh *shell.Shell, running *atomic.Bool) func() {
 			case <-done:
 				return
 			case sig := <-signals:
-				if sig == os.Interrupt && !running.Load() {
+				if sig == os.Interrupt && sh.Interactive && !running.Load() {
 					fmt.Fprint(sh.Stdout, "\n"+prompt)
 				}
 			}

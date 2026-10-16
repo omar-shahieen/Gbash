@@ -115,3 +115,50 @@ func waitTerminalExit(t *testing.T, terminal *testTerminal, status int) {
 		t.Fatal("terminal shell did not exit")
 	}
 }
+
+func TestHistoryInheritedByChildren(t *testing.T) {
+	binary := buildTestShell(t)
+	for _, persistent := range []bool{false, true} {
+		name := "memory only"
+		if persistent {
+			name = "persistent large history"
+		}
+		t.Run(name, func(t *testing.T) {
+			historyFile := ""
+			if persistent {
+				historyFile = filepath.Join(t.TempDir(), "history")
+				// Exceed Linux's single-argument size limit to exercise snapshot transport.
+				if err := os.WriteFile(historyFile, []byte("echo "+strings.Repeat("x", 150000)+"\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			terminal := startTestTerminal(t, binary, historyFile)
+			terminal.readUntil(t, prompt)
+			terminal.command(t, "echo session-history-marker")
+			terminal.readUntil(t, prompt)
+			for _, command := range []string{
+				"history | cat > actual",
+				"history > actual & wait",
+				"true && history > actual & wait",
+				"true && history | cat > actual & wait",
+			} {
+				// Both invocations see the same accepted command in their history.
+				terminal.command(t, "history > expected; "+command)
+				terminal.readUntil(t, prompt)
+				expected, err := os.ReadFile(filepath.Join(terminal.cmd.Dir, "expected"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				actual, err := os.ReadFile(filepath.Join(terminal.cmd.Dir, "actual"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(string(actual), "echo session-history-marker") || string(actual) != string(expected) {
+					t.Fatalf("%s: child history differs from parent (child=%d bytes, parent=%d bytes)", command, len(actual), len(expected))
+				}
+			}
+			terminal.write(t, "exit 0\n")
+			waitTerminalExit(t, terminal, 0)
+		})
+	}
+}

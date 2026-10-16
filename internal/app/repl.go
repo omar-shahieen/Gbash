@@ -33,7 +33,9 @@ func runREPL(sh *shell.Shell, reader *bufio.Reader, running *atomic.Bool, editor
 		if editor != nil {
 			input = editor.read(sh.Shutdown)
 		} else {
-			fmt.Fprint(sh.Stdout, prompt)
+			if sh.Interactive {
+				fmt.Fprint(sh.Stdout, prompt)
+			}
 			input = readLine(reader, sh.Shutdown)
 		}
 		if shutdownRequested(sh.Shutdown) {
@@ -59,7 +61,9 @@ func runREPL(sh *shell.Shell, reader *bufio.Reader, running *atomic.Bool, editor
 			return sh.ExitCode
 		}
 		if errors.Is(input.err, io.EOF) {
-			fmt.Fprintln(sh.Stdout)
+			if sh.Interactive {
+				fmt.Fprintln(sh.Stdout)
+			}
 			return sh.LastStatus
 		}
 	}

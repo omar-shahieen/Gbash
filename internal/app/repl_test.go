@@ -98,3 +98,23 @@ func TestRunReturnsOnReadError(t *testing.T) {
 		t.Fatalf("diagnostics = %q", diagnostics.String())
 	}
 }
+
+func TestNonInteractiveOutputHasNoPrompt(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{
+		{"", ""},
+		{"\n", ""},
+		{"echo final", "final\n"},
+		{"echo first\necho second\n", "first\nsecond\n"},
+		{"echo -n exact", "exact"},
+	} {
+		t.Run(tc.input, func(t *testing.T) {
+			sh := shell.New()
+			var output, diagnostics bytes.Buffer
+			sh.Stdin = strings.NewReader(tc.input)
+			sh.Stdout, sh.Stderr = &output, &diagnostics
+			if status := run(sh); status != 0 || output.String() != tc.want || diagnostics.Len() != 0 {
+				t.Fatalf("status=%d, output=%q, diagnostics=%q; want output=%q", status, output.String(), diagnostics.String(), tc.want)
+			}
+		})
+	}
+}

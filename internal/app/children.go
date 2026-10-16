@@ -15,7 +15,7 @@ import (
 )
 
 // runBuiltinChild executes one built-in in this child process, without a REPL.
-func runBuiltinChild(args []string) int {
+func runBuiltinChild(args []string, history []string) int {
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "minishell: no builtin specified")
 		return 1
@@ -36,11 +36,12 @@ func runBuiltinChild(args []string) int {
 		return 1
 	}
 	sh := shell.New()
+	sh.History = history
 	sh.LastStatus = lastStatus
 	return builtin(sh, args[2:], sh.Stdout, sh.Stderr)
 }
 
-func runChainChild(args []string) int {
+func runChainChild(args []string, history []string) int {
 	if len(args) != 3 {
 		fmt.Fprintln(os.Stderr, "minishell: chain child: expected status, background PID, and entries")
 		return 1
@@ -62,6 +63,7 @@ func runChainChild(args []string) int {
 		return 1
 	}
 	sh := shell.New()
+	sh.History = history
 	sh.LastStatus = lastStatus
 	sh.LastBackgroundPID = pid
 	sh.ChildPGID = syscall.Getpgrp()
@@ -90,7 +92,8 @@ func startBackgroundChain(
 		return 1
 	}
 	command := shell.Command{
-		Name: path,
+		Name:           path,
+		InheritHistory: true,
 		Args: []string{
 			"--chain-child",
 			strconv.Itoa(sh.LastStatus),

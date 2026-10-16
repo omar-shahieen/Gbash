@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -110,7 +111,7 @@ func startStage(sh *shell.Shell, job *shell.Job, stage pipelineStage, group *pro
 		streams.close()
 		return func() int { return 0 }
 	}
-	process, err := startChildCommand(stage.command, streams, group, sh.LastStatus)
+	process, err := startChildCommand(stage.command, streams, group, sh)
 	if err != nil {
 		status := reportLaunchError(stage.command.Name, err, streams.stderr)
 		streams.close()
@@ -132,7 +133,7 @@ func failedStage(process *shell.Process, status int) func() int {
 	return func() int { return status }
 }
 
-func startChildCommand(cmd shell.Command, streams commandStreams, group *processGroup, lastStatus int) (*os.Process, error) {
+func startChildCommand(cmd shell.Command, streams commandStreams, group *processGroup, sh *shell.Shell) (*os.Process, error) {
 	var path string
 	var err error
 	var args []string
@@ -143,7 +144,7 @@ func startChildCommand(cmd shell.Command, streams commandStreams, group *process
 		}
 		args = append(
 			[]string{path, "--builtin-child",
-				strconv.Itoa(lastStatus),
+				strconv.Itoa(sh.LastStatus),
 				cmd.Name},
 			cmd.Args...,
 		)
@@ -158,6 +159,26 @@ func startChildCommand(cmd shell.Command, streams commandStreams, group *process
 	files, err := streams.childFiles()
 	if err != nil {
 		return nil, err
+	}
+	if cmd.Name == "history" || cmd.InheritHistory {
+		// An unlinked file carries the in-memory snapshot without argv size limits,
+		// environment leakage, or a pipe writer that can block during child startup.
+		history, err := os.CreateTemp("", "gbash-child-history-*")
+		if err != nil {
+			return nil, err
+		}
+		defer history.Close()
+		if err := os.Remove(history.Name()); err != nil {
+			return nil, err
+		}
+		if err := json.NewEncoder(history).Encode(sh.History); err != nil {
+			return nil, err
+		}
+		if _, err := history.Seek(0, io.SeekStart); err != nil {
+			return nil, err
+		}
+		files = append(files, history) // Child descriptor 3.
+		args = append([]string{args[0], "--history-child"}, args[1:]...)
 	}
 	return group.launch(path, args, files)
 }

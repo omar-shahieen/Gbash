@@ -15,9 +15,11 @@ type Redirection struct {
 }
 
 type Command struct {
-	Name         string
-	Args         []string
-	Redirections []Redirection
+	// InheritHistory is set only for an internal background-chain child.
+	InheritHistory bool `json:"-"`
+	Name           string
+	Args           []string
+	Redirections   []Redirection
 }
 
 type Pipeline struct {
